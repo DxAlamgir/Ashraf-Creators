@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reseller Terminal</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+    body { background: #080c16; color: #d6e2f0; display: flex; height: 100vh; overflow: hidden; }
+
+    #authOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #080c16; z-index: 2000; display: flex; justify-content: center; align-items: center; }
+    .auth-box { background: #111828; border: 1.5px solid #00ff88; border-radius: 14px; padding: 30px; width: 90%; max-width: 320px; text-align: center; }
+
+    .main-view { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow-y: auto; padding: 25px; }
+    .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #1c273e; }
+    .credit-badge { background: rgba(0, 255, 136, 0.15); border: 1px solid #00ff88; color: #00ff88; padding: 6px 14px; border-radius: 20px; font-weight: 800; }
+
+    .card { background: #111828; border: 1px solid #1c273e; border-radius: 12px; padding: 22px; margin-bottom: 20px; }
+    h3 { color: #00ff88; margin-bottom: 15px; font-size: 16px; }
+
+    .form-group { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    input, select { background: #080c16; border: 1px solid #283755; color: #fff; padding: 11px 14px; border-radius: 8px; outline: none; }
+    
+    .license-type-box { display: flex; background: #080c16; border: 1.5px solid #283755; border-radius: 8px; overflow: hidden; }
+    .type-btn { padding: 9px 16px; font-size: 13px; font-weight: 700; color: #8fa0bd; cursor: pointer; }
+    .type-btn.active { background: #00ff88; color: #04060c; }
+
+    button { background: linear-gradient(135deg, #00ff88, #009944); color: #000; border: none; padding: 11px 18px; border-radius: 8px; cursor: pointer; font-weight: 700; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+    th, td { border: 1px solid #1c273e; padding: 11px 12px; text-align: left; }
+    th { background: #162035; color: #00ff88; }
+    .btn-act { padding: 5px 9px; font-size: 11px; margin: 2px; border-radius: 5px; cursor: pointer; border: none; }
+    .btn-orange { background: #f39c12; color: #fff; }
+    .btn-green { background: #00ff88; color: #000; }
+  </style>
+</head>
+<body>
+
+  <div id="authOverlay">
+    <div class="auth-box">
+      <h3 style="margin-bottom:15px; color:#00ff88;">RESELLER LOGIN</h3>
+      <input type="text" id="loginUser" placeholder="Username" style="width:100%; margin-bottom:12px;" />
+      <input type="password" id="loginPass" placeholder="Password" style="width:100%; margin-bottom:18px;" />
+      <button onclick="login()" style="width:100%;">LOGIN</button>
+      <div style="margin-top: 15px;">
+        <button type="button" onclick="contactDev()" style="width:100%; background:transparent; border:1px solid #00ff88; color:#00ff88; font-size:12px;">
+          💬 CONTACT DEVELOPER
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main-view">
+    <div class="top-bar">
+      <h2>Welcome, <span id="rNameDisplay" style="color:#00ff88;">Reseller</span></h2>
+      <div class="credit-badge" id="crDisplay">Credits: 0</div>
+    </div>
+
+    <div class="card">
+      <h3>Generate Client Key (Costs 1 Credit)</h3>
+      <div class="form-group">
+        <input type="text" id="kName" placeholder="Key (or Auto)" style="flex:1; min-width: 170px;" />
+        <button onclick="autoKey()">🎲 Auto</button>
+
+        <div class="license-type-box">
+          <div class="type-btn active" id="rbtnSingle" onclick="setRMode(false)">Single Device</div>
+          <div class="type-btn" id="rbtnUnlim" onclick="setRMode(true)">Unlimited Devices</div>
+        </div>
+
+        <div id="rDurationArea" style="display:flex; gap:8px;">
+          <input type="number" id="kVal" value="3" style="width:75px;" />
+          <select id="kType">
+            <option value="days" selected>Days</option>
+            <option value="months">Months</option>
+          </select>
+        </div>
+
+        <button onclick="createKey()">ISSUE KEY</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>My Created Keys</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Mode / Plan</th>
+            <th>Device HWID</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rKeyTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAOnukvUIXpnsBqxg6p__73SH_j9z6_XwM",
+      authDomain: "trial-3d140.firebaseapp.com",
+      databaseURL: "https://trial-3d140-default-rtdb.firebaseio.com",
+      projectId: "trial-3d140",
+      storageBucket: "trial-3d140.firebasestorage.app",
+      messagingSenderId: "849558578206",
+      appId: "1:849558578206:android:9bc880cc645505a2afba0f"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentReseller = null;
+    let resellerCredits = 0;
+    let rIsUnlimited = false;
+    let supportUrl = "https://t.me/";
+
+    db.ref("Settings/supportLink").on("value", s => { if (s.exists()) supportUrl = s.val(); });
+    function contactDev() { window.open(supportUrl, "_blank"); }
+
+    function setRMode(unlim) {
+      rIsUnlimited = unlim;
+      document.getElementById("rbtnSingle").classList.toggle("active", !unlim);
+      document.getElementById("rbtnUnlim").classList.toggle("active", unlim);
+      document.getElementById("rDurationArea").style.display = unlim ? "none" : "flex";
+    }
+
+    function login() {
+      const u = document.getElementById("loginUser").value.trim();
+      const p = document.getElementById("loginPass").value.trim();
+      db.ref("Resellers/" + u).once("value").then(snap => {
+        if (snap.exists() && snap.val().password === p) {
+          currentReseller = u;
+          document.getElementById("rNameDisplay").innerText = u.toUpperCase();
+          document.getElementById("authOverlay").style.display = "none";
+          initData();
+        } else {
+          alert("Invalid Login!");
+        }
+      });
+    }
+
+    function autoKey() {
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let res = rIsUnlimited ? "UNLIM-" : "VIP-";
+      for (let i = 0; i < 8; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
+      document.getElementById("kName").value = res;
+    }
+
+    function createKey() {
+      if (resellerCredits < 1) return alert("Not enough credits!");
+      const k = document.getElementById("kName").value.trim();
+      if (!k) return alert("Key required!");
+
+      db.ref("Resellers/" + currentReseller + "/credits").transaction(c => (c || 0) - 1).then(() => {
+        db.ref("Keys/" + k).set({
+          isUnlimited: rIsUnlimited,
+          durationValue: rIsUnlimited ? 0 : (parseInt(document.getElementById("kVal").value) || 1),
+          durationType: rIsUnlimited ? "unlimited" : document.getElementById("kType").value,
+          status: "active",
+          createdBy: currentReseller,
+          registeredDeviceId: "",
+          deviceModel: rIsUnlimited ? "Multi-Device Key" : "Unlinked",
+          firstLoginTime: 0,
+          expiryTime: 0,
+          loggedDevices: {}
+        });
+        document.getElementById("kName").value = "";
+      });
+    }
+
+    function initData() {
+      db.ref("Resellers/" + currentReseller + "/credits").on("value", snap => {
+        resellerCredits = snap.exists() ? snap.val() : 0;
+        document.getElementById("crDisplay").innerText = "Credits: " + resellerCredits;
+      });
+
+      db.ref("Keys").on("value", snap => {
+        const tbody = document.getElementById("rKeyTable");
+        tbody.innerHTML = "";
+        if (snap.exists()) {
+          snap.forEach(c => {
+            const k = c.key;
+            const v = c.val();
+            if (v.createdBy === currentReseller) {
+              let plan = v.isUnlimited ? "<b style='color:#a55eea;'>Unlimited</b>" : `${v.durationValue} ${v.durationType}`;
+              let dev = v.isUnlimited ? `${Object.keys(v.loggedDevices || {}).length} Devices` : (v.registeredDeviceId ? v.deviceModel + " (" + v.registeredDeviceId + ")" : "Unbound");
+
+              tbody.innerHTML += `
+                <tr>
+                  <td><b style="color:#fff;">${k}</b></td>
+                  <td>${plan}</td>
+                  <td>${dev}</td>
+                  <td><b style="color:${v.status === 'active' ? '#00ff88' : '#ff003b'};">${v.status.toUpperCase()}</b></td>
+                  <td>
+                    <button class="btn-act btn-orange" onclick="resetHWID('${k}')">Reset</button>
+                    <button class="btn-act ${v.status === 'frozen' ? 'btn-green' : 'btn-orange'}" onclick="toggleStatus('${k}', '${v.status}')">${v.status === 'frozen' ? 'Unfreeze' : 'Freeze'}</button>
+                  </td>
+                </tr>
+              `;
+            }
+          });
+        }
+      });
+    }
+
+    function resetHWID(k) { db.ref("Keys/" + k).update({ registeredDeviceId: "", deviceModel: "Unlinked" }); }
+    function toggleStatus(k, curr) { db.ref("Keys/" + k).update({ status: curr === "frozen" ? "active" : "frozen" }); }
+  </script>
+</body>
+</html>
